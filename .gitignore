@@ -1,1 +1,7 @@
 tfp.egg-info
+visualizations/
+tfp/__pycache__/
+tfp/config/__pycache__/
+tfp/utils/__pycache__/
+tfp/models/__pycache__/
+data/
