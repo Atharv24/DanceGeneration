@@ -3,6 +3,7 @@ import torch
 import json
 import numpy as np
 import math
+import os
 from tfp.config.config import SPLIT_JSON_LOC
 
 
@@ -12,16 +13,12 @@ class PoseDataset(data.Dataset):
     """
 
     def __init__(self, args):
-        folder_location = os.path.join(os.getcwd(), 'data', args.location)
         self.data = self._get_data(
-            folder_location, args.seq_len, args.overlap, args.split_ratio, args.split, args.num_joints)
+            args.location, args.seq_len, args.overlap, args.split_ratio, args.split, args.num_joints)
         # function
-        self.checkcomb = self.check_comb()
         self.sequence_length = args.seq_len
         self.source_length = args.source_length
-        self.target_length = args.target_length
-        assert self.source_length + \
-            self.target_length != self.sequence_length, "Source length and target length don't sum upto sequence length"
+        self.target_length = self.sequence_length - self.source_length
 
     def __len__(self):
         """
@@ -58,21 +55,20 @@ class PoseDataset(data.Dataset):
             data: total number of frame sequences
         """
         # Unique identifier of the dataset
-        split_string = 'seq_len_'+str(sequence_length) + "_overlap" + \
-            str(overlap) + "_split_ratio" + str(split_ratio)
+        split_string = str(sequence_length) + '_' + str(overlap) + '_' + str(split_ratio)
         # Strides
         strides = sequence_length - \
             math.ceil(overlap * sequence_length / 100)
         # All trial file locations
         file_locations = self._get_files_locations(folder_location)
         # combination present in the config file or not
-        comb_found = self._check_comb()
+        comb_found = self._check_comb(split_string)
         #======== Create train/test data =============#
         if split == 'train':
             if comb_found:
                 with open(SPLIT_JSON_LOC, 'r') as jsonfile:
                     data = json.load(jsonfile)
-                    train_splits = data[self.split_string]['train_splits']
+                    train_splits = data[split_string]['train_splits']
             else:
                 train_splits, test_splits = self._generate_split(
                     file_locations, split_ratio)
@@ -101,7 +97,7 @@ class PoseDataset(data.Dataset):
             if comb_found:
                 with open(SPLIT_JSON_LOC, 'r') as jsonfile:
                     data = json.load(jsonfile)
-                    test_splits = data[self.split_string]['test_splits']
+                    test_splits = data[split_string]['test_splits']
             else:
                 train_splits, test_splits = self._generate_split(
                     file_locations, split_ratio)
@@ -143,7 +139,7 @@ class PoseDataset(data.Dataset):
             folder_location) if x[-3:] == "npy" or x[-3:] == "npz"]
         return np.asarray(all_numpy_files_loc)
 
-    def _check_comb(self):
+    def _check_comb(self, split_string):
         """
         Checks whether json file is present in config folder
         """
@@ -151,7 +147,7 @@ class PoseDataset(data.Dataset):
         file = SPLIT_JSON_LOC
         with open(file) as jsonfile:
             data = json.load(jsonfile)
-            if self.split_string in data.keys():
+            if split_string in data.keys():
                 found = True
             else:
                 found = False
