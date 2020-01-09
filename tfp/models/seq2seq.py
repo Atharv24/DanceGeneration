@@ -25,16 +25,17 @@ class Seq2SeqModel(nn.Module):
         super(Seq2SeqModel, self).__init__()
 
         self.input_size = num_joints*3
+        self.num_joints = num_joints
         # Summary writers for train and test runs
         self.rnn_size = rnn_size
         self.dropout = nn.Dropout(dropout)
+        self.teacher_forcing = teacher_ratio
         self.residual_velocities = residual_velocities
         # === Create the RNN that will keep the state ===
         self.encoder = torch.nn.GRU(
             self.input_size, self.rnn_size, batch_first=True, num_layers=num_layers)
         self.decoder = torch.nn.GRUCell(
-            self.rnn_size, self.rnn_size)
-
+            self.input_size, self.rnn_size)
         self.projector = nn.Linear(self.rnn_size, self.input_size)
 
     def forward(self, encoder_inputs, decoder_inputs):
@@ -46,15 +47,17 @@ class Seq2SeqModel(nn.Module):
             outputs: batch of predicted dance pose sequences, shape=(batch_size,target_seq_length-1,num_joints*3)
         """
         # First calculate the encoder hidden state
-        all_hidden_states, encoder_hidden_state = self.encoder(
-            encoder_inputs)
+        encoder_inputs = encoder_inputs.view(-1, encoder_inputs.size(1), self.input_size)
+        decoder_inputs = decoder_inputs.view(-1, decoder_inputs.size(1), self.input_size)
+        all_hidden_states, encoder_hidden_state = self.encoder(encoder_inputs)
 
         outputs = []
-        next_state = encoder_hidden_state
+        first_decode = True
+        next_state = encoder_hidden_state[-1]
         # Iterate over decoder inputs
-        for inp in decoder_inputs:
+        for inp in decoder_inputs.transpose(0, 1):
             # Perform teacher forcing
-            if random.random() < self.teacher_forcing:
+            if random.random() < self.teacher_forcing and not first_decode:
                 inp = prev_output
             next_state = self.decoder(inp, next_state)
             # Apply residual network to help in smooth transition between subsequent poses
@@ -65,8 +68,38 @@ class Seq2SeqModel(nn.Module):
             # Store the output for Teacher Forcing: use the prediction as
             # the next input instead of feeding the ground truth
             prev_output = output
-            outputs.append(output.view(
-                [1, decoder_inputs.size(0), self.input_size]))
+            outputs.append(output.view(-1, self.num_joints, 3))
+            first_decode = False
 
-        outputs = torch.cat(outputs, 0)
-        return torch.transpose(outputs, 0, 1)
+        outputs = torch.stack(outputs)
+        return outputs.transpose(0, 1)
+
+    def generate(self, warmup_input, n_frames):
+        with torch.no_grad():
+            warmup_input = warmup_input.view(-1, warmup_input.size(1), self.input_size)
+            outputs = []
+            batch_size = warmup_input.size(0)
+            hidden = torch.zeros(batch_size, self.rnn_size)
+            for inp in warmup_input.transpose(0, 1):
+                hidden = self.decoder(inp, hidden)
+
+            last_warmup_input = warmup_input.transpose[-1]
+            if self.residual_velocities:
+                output = last_warmup + self.projector(hidden)
+            else:
+                output = self.projector(hidden)
+
+            outputs.append(output.view(-1, self.num_joints, 3))
+
+            for _ in range(n_frames-1):
+                hidden = self.decoder(output, hidden)
+                if self.residual_velocities:
+                    output = output + self.projector(hidden)
+                else:
+                    output = self.projector(hidden)
+                outputs.append(output.view(-1, self.num_joints, 3))
+            
+            outputs = torch.stack(outputs)
+            return outputs.transpose(0, 1)
+            
+

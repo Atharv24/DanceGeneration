@@ -38,7 +38,7 @@ PARENT_LIMBS = {
 connections = [(0,1), (0,1),(0,5), (1,2), (0,9),(2,3), (3,4), (5,6), (6,7), (7,8), (9,10), (10,11),(11,12), (10,17),(10,13), (13,14), (14,15), (15,16),(10,17), (17,18), (18,19), (19,20)]
 
 class Visualizer:
-    def __init__(self, connections, exp_name):
+    def __init__(self, exp_name, connections=connections):
         self.connections = connections
         self.save_path = os.path.join('visualizations', exp_name)
         self.frames_path = os.path.join(self.save_path, 'frames')
@@ -47,7 +47,7 @@ class Visualizer:
         os.mkdir(self.save_path)
         os.mkdir(self.frames_path)
 
-    def generate_and_save_gif(self, frames, framerate):
+    def generate_and_save_avi(self, frames, framerate):
         framecount = frames.shape[0]
         fig = plt.figure()
         i=0
