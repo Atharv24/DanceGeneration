@@ -47,8 +47,6 @@ class Seq2SeqModel(nn.Module):
             outputs: batch of predicted dance pose sequences, shape=(batch_size,target_seq_length-1,num_joints*3)
         """
         # First calculate the encoder hidden state
-        encoder_inputs = encoder_inputs.view(-1, encoder_inputs.size(1), self.input_size)
-        decoder_inputs = decoder_inputs.view(-1, decoder_inputs.size(1), self.input_size)
         all_hidden_states, encoder_hidden_state = self.encoder(encoder_inputs)
 
         outputs = []
@@ -68,7 +66,7 @@ class Seq2SeqModel(nn.Module):
             # Store the output for Teacher Forcing: use the prediction as
             # the next input instead of feeding the ground truth
             prev_output = output
-            outputs.append(output.view(-1, self.num_joints, 3))
+            outputs.append(output)
             first_decode = False
 
         outputs = torch.stack(outputs)
@@ -76,20 +74,19 @@ class Seq2SeqModel(nn.Module):
 
     def generate(self, warmup_input, n_frames):
         with torch.no_grad():
-            warmup_input = warmup_input.view(-1, warmup_input.size(1), self.input_size)
             outputs = []
             batch_size = warmup_input.size(0)
             hidden = torch.zeros(batch_size, self.rnn_size)
             for inp in warmup_input.transpose(0, 1):
                 hidden = self.decoder(inp, hidden)
 
-            last_warmup_input = warmup_input.transpose[-1]
+            last_warmup_input = warmup_input.transpose(0, 1)[-1]
             if self.residual_velocities:
-                output = last_warmup + self.projector(hidden)
+                output = last_warmup_input + self.projector(hidden)
             else:
                 output = self.projector(hidden)
 
-            outputs.append(output.view(-1, self.num_joints, 3))
+            outputs.append(output)
 
             for _ in range(n_frames-1):
                 hidden = self.decoder(output, hidden)
@@ -97,7 +94,7 @@ class Seq2SeqModel(nn.Module):
                     output = output + self.projector(hidden)
                 else:
                     output = self.projector(hidden)
-                outputs.append(output.view(-1, self.num_joints, 3))
+                outputs.append(output)
             
             outputs = torch.stack(outputs)
             return outputs.transpose(0, 1)

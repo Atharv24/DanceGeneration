@@ -12,13 +12,9 @@ class PoseDataset(data.Dataset):
     """
 
     def __init__(self, args):
-        """
-        Parameter:
-        frames :  collection of frames sequences
-        shape  : (num_collections,sequence_length,dimension)
-        """
+        folder_location = os.path.join(os.getcwd(), 'data', args.location)
         self.data = self._get_data(
-            args.location, args.seq_len, args.overlap, args.split_size, args.split, args.num_joints)
+            folder_location, args.seq_len, args.overlap, args.split_ratio, args.split, args.num_joints)
         # function
         self.checkcomb = self.check_comb()
         self.sequence_length = args.seq_len
@@ -27,7 +23,7 @@ class PoseDataset(data.Dataset):
         assert self.source_length + \
             self.target_length != self.sequence_length, "Source length and target length don't sum upto sequence length"
 
-    def ___len__(self):
+    def __len__(self):
         """
         returns: total number of collections of frame sequences
         """
@@ -48,13 +44,13 @@ class PoseDataset(data.Dataset):
                            1:self.source_length+self.target_length, :]
         return torch.FloatTensor(encoder_input), torch.FloatTensor(decoder_input), torch.FloatTensor(target)
 
-    def _get_data(self, folder_location, sequence_length, overlap, split_size, split, num_joints):
+    def _get_data(self, folder_location, sequence_length, overlap, split_ratio, split, num_joints):
         """
         Args:
             folder_location: location of the dataset folder
             sequence_length: total number of dance pose frames in each batch
             overlap: overlap between subsequent dance pose frames
-            split_size: percentage of frames in test dataset
+            split_ratio: percentage of frames in test dataset
             split: train / test data
             num_joints: number of joints in the pose
 
@@ -63,7 +59,7 @@ class PoseDataset(data.Dataset):
         """
         # Unique identifier of the dataset
         split_string = 'seq_len_'+str(sequence_length) + "_overlap" + \
-            str(overlap) + "_split_size" + str(split_size)
+            str(overlap) + "_split_ratio" + str(split_ratio)
         # Strides
         strides = sequence_length - \
             math.ceil(overlap * sequence_length / 100)
@@ -79,7 +75,7 @@ class PoseDataset(data.Dataset):
                     train_splits = data[self.split_string]['train_splits']
             else:
                 train_splits, test_splits = self._generate_split(
-                    file_locations, split_size)
+                    file_locations, split_ratio)
                 data = None
                 with open(SPLIT_JSON_LOC, "r") as jsonfile:
                     data = json.load(jsonfile)
@@ -108,7 +104,7 @@ class PoseDataset(data.Dataset):
                     test_splits = data[self.split_string]['test_splits']
             else:
                 train_splits, test_splits = self._generate_split(
-                    file_locations, split_size)
+                    file_locations, split_ratio)
                 data = None
                 with open(SPLIT_JSON_LOC, "r") as jsonfile:
                     data = json.load(jsonfile)
@@ -130,10 +126,10 @@ class PoseDataset(data.Dataset):
 
             return np.asarray(test_data).reshape(-1, sequence_length, num_joints*3)
 
-    def _generate_split(self, file_locations, split_size):
+    def _generate_split(self, file_locations, split_ratio):
         """ function to divide trails into train trials and split trails"""
 
-        num_test_trails = math.floor(len(file_locations) * (split_size)//100)
+        num_test_trails = math.floor(len(file_locations) * (split_ratio))
         np.random.shuffle(file_locations)
         train_split = file_locations[num_test_trails:]
         test_split = file_locations[:num_test_trails]
