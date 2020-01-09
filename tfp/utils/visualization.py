@@ -58,6 +58,9 @@ class Visualizer:
                 bones.append(bone)
             
             ax = Axes3D(fig)
+            ax.set_xlim3d(-50, 10)
+            ax.set_ylim3d(-20, 40)
+            ax.set_zlim3d(-20, 40)
 
             plt.plot(frame[:, 2], frame[:, 0], frame[:, 1], "r.")
             for bone in bones:
