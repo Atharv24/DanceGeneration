@@ -19,6 +19,7 @@ class PoseDataset(data.Dataset):
         self.sequence_length = args.seq_len
         self.source_length = args.source_length
         self.target_length = self.sequence_length - self.source_length
+        self.mode = args.split
 
     def __len__(self):
         """
@@ -34,12 +35,15 @@ class PoseDataset(data.Dataset):
             decoder_output: dance pose sequence used as target 
         """
         frame_seq = self.data[idx]
-        encoder_input = frame_seq[:self.source_length, :]
-        decoder_input = frame_seq[self.source_length:
-                                  self.source_length+self.target_length-1, :]
-        target = frame_seq[self.source_length +
-                           1:self.source_length+self.target_length, :]
-        return torch.FloatTensor(encoder_input), torch.FloatTensor(decoder_input), torch.FloatTensor(target)
+        if self.mode == 'train' or self.mode == 'test':
+            encoder_input = frame_seq[:self.source_length, :]
+            decoder_input = frame_seq[self.source_length:
+                                      self.source_length+self.target_length-1, :]
+            target = frame_seq[self.source_length +
+                               1:self.source_length+self.target_length, :]
+            return torch.FloatTensor(encoder_input), torch.FloatTensor(decoder_input), torch.FloatTensor(target)
+        #elif self.mode == 'test':
+        #    return torch.FloatTensor(frame_seq)
 
     def _get_data(self, folder_location, sequence_length, overlap, split_ratio, split, num_joints):
         """

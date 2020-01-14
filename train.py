@@ -22,7 +22,7 @@ parser.add_argument("--split_ratio", help="Test/Train ratio",
 parser.add_argument("--num_joints", help="number of joints",
                     default=21, type=int)
 parser.add_argument("--source_length", help="source_length", default=60, type=int)
-parser.add_argument('--split', help='lauvda', default='train')
+parser.add_argument('--split', help='Either "train" or "test"', default='train')
 
 args = parser.parse_args()
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # Spliting into train and testdata
     # transformed data location
     posedataset = PoseDataset(args)
-    train_loader = DataLoader(posedataset, batch_size=16, num_workers=4)
+    train_loader = DataLoader(posedataset, batch_size=16, num_workers=2, shuffle=True)
 
     model = Seq2SeqModel(None, 128, num_layers=3, num_joints=21,
                          residual_velocities=True, dropout=0.3, teacher_ratio=0.3)

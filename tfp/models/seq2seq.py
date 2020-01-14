@@ -34,9 +34,9 @@ class Seq2SeqModel(nn.Module):
         # === Create the RNN that will keep the state ===
         self.encoder = torch.nn.GRU(
             self.input_size, self.rnn_size, batch_first=True, num_layers=num_layers)
-        self.decoder = torch.nn.GRUCell(
-            self.input_size, self.rnn_size)
-        self.projector = nn.Linear(self.rnn_size, self.input_size)
+        self.decoder = torch.nn.GRU(
+            self.input_size, self.rnn_size, num_layers=num_layers, dropout=dropout)
+        self.projector = nn.Linear(self.rnn_size*num_layers, self.input_size)
 
     def forward(self, encoder_inputs, decoder_inputs):
         """
@@ -47,20 +47,20 @@ class Seq2SeqModel(nn.Module):
             outputs: batch of predicted dance pose sequences, shape=(batch_size,target_seq_length-1,num_joints*3)
         """
         # First calculate the encoder hidden state
-        all_hidden_states, encoder_hidden_state = self.encoder(encoder_inputs)
-
+        _, encoder_hidden_state = self.encoder(encoder_inputs)
+        batch_size = decoder_inputs.size(0)
         outputs = []
         first_decode = True
-        next_state = encoder_hidden_state[-1]
+        next_state = encoder_hidden_state
         # Iterate over decoder inputs
         for inp in decoder_inputs.transpose(0, 1):
             # Perform teacher forcing
             if random.random() < self.teacher_forcing and not first_decode:
                 inp = prev_output
-            next_state = self.decoder(inp, next_state)
+            _, next_state = self.decoder(inp.unsqueeze(0), next_state)
             # Apply residual network to help in smooth transition between subsequent poses
             if self.residual_velocities:
-                output = inp + self.projector(self.dropout(next_state))
+                output = inp + self.projector(self.dropout(next_state.view(batch_size, -1)))
             else:
                 output = self.projector(self.dropout(next_state))
             # Store the output for Teacher Forcing: use the prediction as
