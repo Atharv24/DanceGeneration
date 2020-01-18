@@ -4,7 +4,7 @@ import tfp.config.config as config
 import torch
 from torch.utils.data import DataLoader
 from tfp.utils.data_loader import PoseDataset
-from tfp.models.seq2seq import Seq2SeqModel
+from tfp.models.acGRU import acModel
 from tqdm import tqdm, trange
 
 
@@ -23,6 +23,7 @@ parser.add_argument("--num_joints", help="number of joints",
                     default=21, type=int)
 parser.add_argument("--source_length", help="source_length", default=60, type=int)
 parser.add_argument('--split', help='Either "train" or "test"', default='train')
+parser.add_argument('--normalize', help='Use to flag to normalize data', default=1, type=int)
 
 args = parser.parse_args()
 
@@ -32,23 +33,23 @@ if __name__ == "__main__":
     # Spliting into train and testdata
     # transformed data location
     posedataset = PoseDataset(args)
-    train_loader = DataLoader(posedataset, batch_size=16, num_workers=2, shuffle=True)
+    train_loader = DataLoader(posedataset, batch_size=16, num_workers=2, shuffle=True, pin_memory=True)
 
-    model = Seq2SeqModel(None, 128, num_layers=3, num_joints=21,
-                         residual_velocities=True, dropout=0.3, teacher_ratio=0.3)
+    model = acModel(512, num_layers=3, num_joints=21, residual_velocities=True)
     model = model.cuda()
 
     EPOCHS = 200
-    save_freq = 10
-    opt = torch.optim.SGD(model.parameters(), lr=1e-3)
-    MSE = torch.nn.MSELoss()
+    condition_length = 5
+    ground_truth_length = 5
+    save_freq = 2
+    opt = torch.optim.Adam(model.parameters(), lr=1e-4)
     avg_losses = []
     for epoch in range(EPOCHS):
         losses = []
-        for encoder_inputs, decoder_inputs, target in tqdm(train_loader, desc=f'Epoch {epoch+1}', unit='batch', leave=False):
+        for input_seq, target_seq in tqdm(train_loader, desc=f'Epoch {epoch+1}', unit='batch', leave=False):
             opt.zero_grad()
-            output = model(encoder_inputs.cuda(), decoder_inputs.cuda())
-            loss = MSE(output.cpu(), target)
+            output = model(input_seq.cuda(), condition_length, ground_truth_length)
+            loss = model.calculate_loss(target_seq.cuda(), output)
             loss.backward()
             opt.step()
 

@@ -5,6 +5,7 @@ import numpy as np
 import math
 import os
 from tfp.config.config import SPLIT_JSON_LOC
+from tfp.utils.preprocess import Normalizer
 
 
 class PoseDataset(data.Dataset):
@@ -16,10 +17,12 @@ class PoseDataset(data.Dataset):
         self.data = self._get_data(
             args.location, args.seq_len, args.overlap, args.split_ratio, args.split, args.num_joints)
         # function
+        self.normalize = args.normalize
+        self.numjoints = args.num_joints
         self.sequence_length = args.seq_len
         self.source_length = args.source_length
         self.target_length = self.sequence_length - self.source_length
-        self.mode = args.split
+        self.normalizer = Normalizer(args.num_joints)
 
     def __len__(self):
         """
@@ -30,20 +33,21 @@ class PoseDataset(data.Dataset):
     def __getitem__(self, idx):
         """
         Returns:
-            encoder_input: dance pose sequence input for encoder
-            decoder_input: dance pose sequence input for decoder
-            decoder_output: dance pose sequence used as target 
+            encoder_input: dance pose sequence input for the encoder
+            decoder_input: dance pose sequence input for the decoder
+            decoder_output: dance pose sequence used as the target 
         """
-        frame_seq = self.data[idx]
-        if self.mode == 'train' or self.mode == 'test':
-            encoder_input = frame_seq[:self.source_length, :]
-            decoder_input = frame_seq[self.source_length:
-                                      self.source_length+self.target_length-1, :]
-            target = frame_seq[self.source_length +
-                               1:self.source_length+self.target_length, :]
-            return torch.FloatTensor(encoder_input), torch.FloatTensor(decoder_input), torch.FloatTensor(target)
-        #elif self.mode == 'test':
-        #    return torch.FloatTensor(frame_seq)
+        frame_seq = self.data[idx].reshape(-1, self.numjoints, 3)
+        if self.normalize:
+            frame_seq = self.normalizer.normalize(
+                frame_seq.reshape(-1, self.numjoints, 3))
+        return torch.FloatTensor(frame_seq[:-1, :, :]), torch.FloatTensor(frame_seq[1:, :, :])
+        #encoder_input = frame_seq[:self.source_length, :]
+        #decoder_input = frame_seq[self.source_length:
+        #                          self.source_length+self.target_length-1, :]
+        #target = frame_seq[self.source_length +
+        #                   1:self.source_length+self.target_length, :]
+        #return torch.FloatTensor(encoder_input), torch.FloatTensor(decoder_input), torch.FloatTensor(target)
 
     def _get_data(self, folder_location, sequence_length, overlap, split_ratio, split, num_joints):
         """
@@ -54,7 +58,6 @@ class PoseDataset(data.Dataset):
             split_ratio: percentage of frames in test dataset
             split: train / test data
             num_joints: number of joints in the pose
-
         Returns:
             data: total number of frame sequences
         """

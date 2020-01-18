@@ -10,24 +10,27 @@ def smoothen(joints, window=11, order=3, axis=0):
     return savgol_filter(joints, window, order, axis=axis)
 
 
-class Transformation:
+class Normalizer(object):
+    """
+    Consists of functions required for bone length normalization
+    """
 
     def __init__(self, number_joints):
         """
         """
-        self.parent_limbs = config.PARENT_LIMBS[number_joints]
+        self.parent_limbs = np.asarray(config.PARENT_LIMBS[number_joints])
         self.root = config.ROOT_LIMB[number_joints]
         self.head = config.HEAD_LIMB[number_joints]
-        self.limb_ratios = config.LIMB_RATIOS[number_joints]
+        self.limb_ratios = np.asarray(config.LIMB_RATIOS[number_joints])
 
     def _gen_limb_graph(self):
         """
         returns a list whose each index i stores its corresponding children
         """
-        n = len(parent_limbs)
+        n = len(self.parent_limbs)
         G = [[] for i in range(n)]
         for i in range(n):
-            j = parent_limbs[i]
+            j = self.parent_limbs[i]
             if i != j:
                 G[j].append(i)
         return G
@@ -36,7 +39,7 @@ class Transformation:
 
         from collections import deque
         # Generate the graph
-        G = _gen_limb_graph()
+        G = self._gen_limb_graph()
         # Store the bfs order of the joints
         q = deque([self.root])
         order = []
@@ -52,7 +55,6 @@ class Transformation:
         Params:
         joints_xyz: joint locations in different frames in Cartesian coordinates
         shape : [number_frames,number_joints,3]
-
 
         Returns:
         rel_joints_xyz: location of every joint relative to their respective parents
@@ -70,17 +72,17 @@ class Transformation:
         shape : [number_frames,number_joints,3]
 
         Returns:
-        abs_joints_xyz: location of every joint relative to their respective parents
+        abs_joints_xyz: location of every joint
         shape : [number_frames,number_joints,3]
         """
 
         abs_joints_xyz = np.zeros_like(rel_joints_xyz, dtype=np.float64)
-        limb_order = _bfs_order()
+        limb_order = self._bfs_order()
         # Restore the initial coordinates of the root joint
         abs_joints_xyz[:, limb_order[0]] = self.abs_root_xyz
         # Traverse the bfs tree to calculate the joint coordinates
         for l in limb_order[1:]:
-            p = parent_limbs[l]
+            p = self.parent_limbs[l]
             abs_joints_xyz[:, l] = abs_joints_xyz[:, p] + rel_joints_xyz[:, l]
         return abs_joints_xyz
 
@@ -114,10 +116,10 @@ class Transformation:
         xyz[:, :, 1] = rtp[:, :, 0] * \
             np.sin(rtp[:, :, 1]) * np.sin(rtp[:, :, 2])
         # z coordinates: r * cos(θ)
-        xyz[:, :, 2] = rtp[:, :, 0] * np.sin(rtp[:, :, 1])
+        xyz[:, :, 2] = rtp[:, :, 0] * np.cos(rtp[:, :, 1])
         return xyz
 
-    def transform(self, joints, head_length=2.0):
+    def normalize(self, joints, head_length=2.0):
         """
         Params:
         joints : the absolute joint coordinates of every frame before normalization
@@ -135,7 +137,7 @@ class Transformation:
         # normalization of limb lengths
         fixed_limb_lengths = head_length * self.limb_ratios
         # Replace the limb lengths with unnormalized limb lengths
-        sph_rel_joints[:, 0] = fixed_limb_lengths
+        sph_rel_joints[:, :, 0] = fixed_limb_lengths
         # Convert Spherical coordinates back to Cartesian coordinates
         cart_rel_joints = self._sph2cart(sph_rel_joints)
         # Recover the absolute coordinates
@@ -159,11 +161,11 @@ class GetData:
 
     def getdata(self):
 
-        save_data_folder = os.path.join(os.getcwd(), 'data', self.category)
+        sav_dat_fol = os.path.join(os.getcwd(), self.category)
         transform = Transformation(self.num_joints)
         print("data transformation started.......")
-        if not os.path.exists(save_data_folder):
-            os.mkdir(save_data_folder)
+        if not os.path.exists(sav_dat_fol):
+            os.mkdir(sav_dat_fol)
 
         with open(self.label_file) as jsonfile:
             data_files = json.load(jsonfile)[self.category]
@@ -174,8 +176,9 @@ class GetData:
 
                 _onlyjoint_data = []
                 for frame in data:
-                	_onlyjoint_data.append(frame[np.asarray(config.JOINT_INDEX[self.num_joints])])
-                #_data = transform.transform(np.asarray(_onlyjoint_data))
+                    _onlyjoint_data.append(
+                        frame[np.asarray(config.JOINT_INDEX[self.num_joints])])
+                _data = transform.transform(np.asarray(_onlyjoint_data))
                 _data = _onlyjoint_data
 
                 np.save(os.path.join(sav_dat_fol, file_+".npy"), _data)
