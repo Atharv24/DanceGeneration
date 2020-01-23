@@ -14,15 +14,16 @@ class PoseDataset(data.Dataset):
     """
 
     def __init__(self, args):
+        self.normalizer = Normalizer(args.num_joints)
+        self.normalize = bool(args.normalize)
+        
         self.data = self._get_data(
             args.location, args.seq_len, args.overlap, args.split_ratio, args.split, args.num_joints)
         # function
-        self.normalize = args.normalize
         self.numjoints = args.num_joints
         self.sequence_length = args.seq_len
         self.source_length = args.source_length
         self.target_length = self.sequence_length - self.source_length
-        self.normalizer = Normalizer(args.num_joints)
 
     def __len__(self):
         """
@@ -37,10 +38,7 @@ class PoseDataset(data.Dataset):
             decoder_input: dance pose sequence input for the decoder
             decoder_output: dance pose sequence used as the target 
         """
-        frame_seq = self.data[idx].reshape(-1, self.numjoints, 3)
-        if self.normalize:
-            frame_seq = self.normalizer.normalize(
-                frame_seq.reshape(-1, self.numjoints, 3))
+        frame_seq = self.data[idx]
         return torch.FloatTensor(frame_seq[:-1, :, :]), torch.FloatTensor(frame_seq[1:, :, :])
         #encoder_input = frame_seq[:self.source_length, :]
         #decoder_input = frame_seq[self.source_length:
@@ -91,14 +89,15 @@ class PoseDataset(data.Dataset):
             for file_name in train_splits:
                 file_loc = os.path.join(folder_location, file_name)
                 data = np.load(file_loc)
+                if self.normalize:
+                    data = self.normalizer.normalize(data)
                 if data.shape[0] < sequence_length:
                     break
                 num_batches = (data.shape[0] - sequence_length)//(strides) + 1
                 for i in range(num_batches):
                     train_data.append(
                         data[i * strides: sequence_length + i * strides])
-
-            return np.asarray(train_data).reshape(-1, sequence_length, num_joints*3)
+            return np.asarray(train_data)
 
         else:
             if comb_found:
@@ -120,14 +119,15 @@ class PoseDataset(data.Dataset):
             for file_name in test_splits:
                 file_loc = os.path.join(folder_location, file_name)
                 data = np.load(file_loc)
+                if self.normalize:
+                    data = self.normalizer.normalize(data)
                 if data.shape[0] < sequence_length:
                     break
                 num_batches = (data.shape[0] - sequence_length)//(strides) + 1
                 for i in range(num_batches):
                     test_data.append(
                         data[i * strides: sequence_length + i * strides])
-
-            return np.asarray(test_data).reshape(-1, sequence_length, num_joints*3)
+            return np.asarray(test_data)
 
     def _generate_split(self, file_locations, split_ratio):
         """ function to divide trails into train trials and split trails"""

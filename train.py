@@ -18,12 +18,12 @@ parser.add_argument("--overlap",
 parser.add_argument(
     "--location", help="location of data set", default="data/salsa")
 parser.add_argument("--split_ratio", help="Test/Train ratio",
-                    default=0.2, type=int)
+                    default=0.2, type=float)
 parser.add_argument("--num_joints", help="number of joints",
                     default=21, type=int)
 parser.add_argument("--source_length", help="source_length", default=60, type=int)
 parser.add_argument('--split', help='Either "train" or "test"', default='train')
-parser.add_argument('--normalize', help='Use to flag to normalize data', default=1, type=int)
+parser.add_argument('--normalize', help='Use this flag to normalize data', default=1, type=int)
 
 args = parser.parse_args()
 
@@ -33,31 +33,43 @@ if __name__ == "__main__":
     # Spliting into train and testdata
     # transformed data location
     posedataset = PoseDataset(args)
-    train_loader = DataLoader(posedataset, batch_size=16, num_workers=2, shuffle=True, pin_memory=True)
+    train_loader = DataLoader(posedataset, batch_size=8, num_workers=4, shuffle=True, pin_memory=True)
+    print()
+    data_iter = iter(train_loader)
 
-    model = acModel(512, num_layers=3, num_joints=21, residual_velocities=True)
+    model = acModel(256, num_layers=3, num_joints=21, residual_velocities=True)
     model = model.cuda()
+    model.load_state_dict(torch.load('saved_models/state_dict_100000_iterations.pt'))
 
-    EPOCHS = 200
-    condition_length = 5
-    ground_truth_length = 5
-    save_freq = 2
+    ITERATIONS = 100000
+    condition_length = 10
+    ground_truth_length = 10
+    save_freq = 2000
     opt = torch.optim.Adam(model.parameters(), lr=1e-4)
-    avg_losses = []
-    for epoch in range(EPOCHS):
-        losses = []
-        for input_seq, target_seq in tqdm(train_loader, desc=f'Epoch {epoch+1}', unit='batch', leave=False):
-            opt.zero_grad()
-            output = model(input_seq.cuda(), condition_length, ground_truth_length)
-            loss = model.calculate_loss(target_seq.cuda(), output)
-            loss.backward()
-            opt.step()
+    opt.load_state_dict(torch.load('saved_models/opt_state_dict_100000_iterations.pt'))
+    avg_loss = 0.0
+    print('Starting Training: \n')
+    t = trange(ITERATIONS, unit='batch')
+    for iteration in t:
+        t.set_description(f'Step {iteration+1}')
 
-            losses.append(loss.item())
-        avg_loss = sum(losses)/len(losses)
-        avg_losses.append(avg_loss)
-        print(f'Epoch {epoch+1} Completed\nLoss: {avg_loss}\n')
-        if (epoch+1) % save_freq == 0:
-            print("Saving model\n")
+        try:
+            input_seq, target_seq = next(data_iter) 
+        except StopIteration: 
+            data_iter = iter(train_loader)
+            input_seq, target_seq = next(data_iter)
+
+        opt.zero_grad()
+        output = model(input_seq.cuda(), condition_length, ground_truth_length)
+        loss = model.calculate_loss(target_seq.cuda(), output)
+        loss.backward()
+        opt.step()
+        avg_loss = avg_loss + 0.05*(loss.item()-avg_loss)
+        t.set_postfix_str(f'Loss: {avg_loss:.5f}')
+        t.update()
+
+        if (iteration+1) % save_freq == 0:
             torch.save(model.state_dict(),
-                       f'saved_models/state_dict_{epoch+1}_epochs.pt')
+                       f'saved_models/state_dict_{iteration+1}_iterations.pt')
+            torch.save(opt.state_dict(),
+                       f'saved_models/opt_state_dict_{iteration+1}_iterations.pt')

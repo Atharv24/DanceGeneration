@@ -18,6 +18,7 @@ class Normalizer(object):
     def __init__(self, number_joints):
         """
         """
+        self.number_joints = number_joints
         self.parent_limbs = np.asarray(config.PARENT_LIMBS[number_joints])
         self.root = config.ROOT_LIMB[number_joints]
         self.head = config.HEAD_LIMB[number_joints]
@@ -119,6 +120,15 @@ class Normalizer(object):
         xyz[:, :, 2] = rtp[:, :, 0] * np.cos(rtp[:, :, 1])
         return xyz
 
+    def _rel_root_joint(self, joints):
+        """
+        Assumed shape: [number_frames, number_joints, 3]
+        """
+        root_locations = joints[:, self.root, :].copy()
+        rel_joints_root_xyz = joints - joints[:, self.root:self.root+1, :]
+        rel_joints_root_xyz[:, self.root, :] = root_locations
+        return rel_joints_root_xyz
+
     def normalize(self, joints, head_length=2.0):
         """
         Params:
@@ -142,8 +152,10 @@ class Normalizer(object):
         cart_rel_joints = self._sph2cart(sph_rel_joints)
         # Recover the absolute coordinates
         cart_abs_joints = self._get_abs_joint_locations(cart_rel_joints)
+        # root location relative to first frame, joint locations rel to root
+        rel_joints_root_xyz = self._rel_root_joint(cart_abs_joints)
 
-        return cart_abs_joints
+        return rel_joints_root_xyz
 
 
 class GetData:

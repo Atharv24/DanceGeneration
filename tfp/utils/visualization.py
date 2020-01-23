@@ -43,6 +43,7 @@ class Visualizer:
         self.frames_path = os.path.join(self.save_path, 'frames')
         if os.path.exists(self.save_path):
             shutil.rmtree(self.save_path)
+        print(f'Saving to {self.save_path}')
         os.mkdir(self.save_path)
         os.mkdir(self.frames_path)
 
