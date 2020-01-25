@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 from tfp.utils.visualization import Visualizer
 from tfp.utils.data_loader import PoseDataset
-from tfp.models.acGRU import acModel
+from tfp.models.transformer import TransformerModel
 
 def add_root(rel_root_joints, root=0):
         """
@@ -42,7 +42,16 @@ if __name__ == "__main__":
     visualizer_gen = Visualizer('Generated')
     visualizer_truth = Visualizer('Ground Truth')
 
-    model = acModel(256, num_layers=3, num_joints=21, residual_velocities=True).cuda()
+    n_joints = 21
+    n_embed = 32
+    n_head = 2
+    n_hidden = 128
+    n_layers = 2
+
+    model = TransformerModel(n_joints, n_embed, n_head, n_hidden, n_layers, dropout=0.2, residual_velocities=True)
+    model = model.cuda()
+    
+    #model = acModel(256, num_layers=3, num_joints=21, residual_velocities=True).cuda()
     model.eval()
     model.load_state_dict(torch.load(f'saved_models/state_dict_{args.checkpoint}_iterations.pt'))
 
@@ -53,7 +62,7 @@ if __name__ == "__main__":
     ground_truth = None
     for inp, tgt in test_data_loader:
         inp = inp.cuda()
-        output = model.generate(inp, n_frames)
+        output = model(inp)
         ground_truth = tgt
         break
 

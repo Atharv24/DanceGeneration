@@ -4,7 +4,7 @@ import tfp.config.config as config
 import torch
 from torch.utils.data import DataLoader
 from tfp.utils.data_loader import PoseDataset
-from tfp.models.acGRU import acModel
+from tfp.models.transformer import TransformerModel
 from tqdm import tqdm, trange
 
 
@@ -33,20 +33,26 @@ if __name__ == "__main__":
     # Spliting into train and testdata
     # transformed data location
     posedataset = PoseDataset(args)
-    train_loader = DataLoader(posedataset, batch_size=8, num_workers=4, shuffle=True, pin_memory=True)
-    print()
+    train_loader = DataLoader(posedataset, batch_size=4, shuffle=True)
     data_iter = iter(train_loader)
 
-    model = acModel(256, num_layers=3, num_joints=21, residual_velocities=True)
+    #model = acModel(256, num_layers=3, num_joints=21, residual_velocities=True)
+    n_joints = 21
+    n_embed = 32
+    n_head = 2
+    n_hidden = 128
+    n_layers = 2
+
+    model = TransformerModel(n_joints, n_embed, n_head, n_hidden, n_layers, residual_velocities=True, dropout=0.2)
     model = model.cuda()
-    model.load_state_dict(torch.load('saved_models/state_dict_100000_iterations.pt'))
+    #model.load_state_dict(torch.load('saved_models/state_dict_100000_iterations.pt'))
 
     ITERATIONS = 100000
-    condition_length = 10
-    ground_truth_length = 10
-    save_freq = 2000
+    #condition_length = 10
+    #ground_truth_length = 10
+    save_freq = 500
     opt = torch.optim.Adam(model.parameters(), lr=1e-4)
-    opt.load_state_dict(torch.load('saved_models/opt_state_dict_100000_iterations.pt'))
+    #opt.load_state_dict(torch.load('saved_models/opt_state_dict_100000_iterations.pt'))
     avg_loss = 0.0
     print('Starting Training: \n')
     t = trange(ITERATIONS, unit='batch')
@@ -60,7 +66,7 @@ if __name__ == "__main__":
             input_seq, target_seq = next(data_iter)
 
         opt.zero_grad()
-        output = model(input_seq.cuda(), condition_length, ground_truth_length)
+        output = model(input_seq.cuda())
         loss = model.calculate_loss(target_seq.cuda(), output)
         loss.backward()
         opt.step()
