@@ -3,7 +3,7 @@
 ## Installation
 
 ```bash
-git clone https://github.com/h3li05369/DanceTransformer.git
+git clone https://github.com/Atharv24/DanceGeneration.git
 cd DanceTransformer
 virtualenv env
 pip install -e . ## for those who want to develop
